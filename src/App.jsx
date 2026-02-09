@@ -55,13 +55,23 @@ function useKeys() {
     // Guard against SSR / pre-render passes.
     if (typeof window === "undefined") return;
 
+    const blockedKeys = new Set([
+      "Space",
+      "ArrowUp",
+      "ArrowDown",
+      "ArrowLeft",
+      "ArrowRight",
+    ]);
+
     const onKeyDown = (e) => {
       const code = e?.code;
+      if (blockedKeys.has(code)) e.preventDefault();
       safeSetKey(keysRef.current, code, true);
     };
 
     const onKeyUp = (e) => {
       const code = e?.code;
+      if (blockedKeys.has(code)) e.preventDefault();
       safeSetKey(keysRef.current, code, false);
     };
 
@@ -115,7 +125,9 @@ function HUD({ collected, total, win, hint }) {
             borderRadius: 10,
           }}
         >
-          <div style={{ fontSize: 12, opacity: 0.95 }}>TOFU64: FRIDGE LEVEL</div>
+          <div style={{ fontSize: 12, opacity: 0.95 }}>
+            TOFU64: FRIDGE RAID
+          </div>
           <div style={{ fontSize: 13, marginTop: 6 }}>
             Edamame: <b>{collected}</b> / {total}
           </div>
@@ -190,6 +202,31 @@ function HUD({ collected, total, win, hint }) {
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function RetroScreenOverlay() {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        pointerEvents: "none",
+        backgroundImage:
+          "repeating-linear-gradient(0deg, rgba(255,255,255,0.04), rgba(255,255,255,0.04) 1px, rgba(0,0,0,0) 2px, rgba(0,0,0,0) 4px)",
+        mixBlendMode: "soft-light",
+        opacity: 0.55,
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background:
+            "radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.35) 100%)",
+        }}
+      />
     </div>
   );
 }
@@ -297,6 +334,30 @@ function Collectible({ id, position, onCollect, disabled }) {
   );
 }
 
+function FridgeFan() {
+  const ref = useRef(null);
+  useFrame((_, dt) => {
+    if (ref.current) ref.current.rotation.z -= dt * 3.2;
+  });
+
+  return (
+    <group position={[0, 8.6, -9.2]}>
+      <mesh>
+        <cylinderGeometry args={[1.1, 1.1, 0.2, 10]} />
+        <meshStandardMaterial color="#c7d7ea" roughness={0.3} />
+      </mesh>
+      <group ref={ref}>
+        {[0, 1, 2, 3].map((i) => (
+          <mesh key={i} rotation={[0, 0, (Math.PI / 2) * i]}>
+            <boxGeometry args={[0.18, 2.0, 0.05]} />
+            <meshStandardMaterial color="#e6f4ff" roughness={0.2} />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  );
+}
+
 function FridgeLevel({ onCollect, collectedSet }) {
   const collectibles = useMemo(
     () => [
@@ -316,6 +377,7 @@ function FridgeLevel({ onCollect, collectedSet }) {
 
   return (
     <group>
+      <FridgeFan />
       {/* The fridge interior shell */}
       <StaticBlock
         pos={[0, -1.2, 0]}
@@ -413,6 +475,11 @@ function FridgeLevel({ onCollect, collectedSet }) {
       <mesh position={[0, 5.0, 9.15]} receiveShadow>
         <boxGeometry args={[14.8, 12.5, 0.2]} />
         <meshStandardMaterial color="#a5c9f0" roughness={0.55} />
+      </mesh>
+
+      <mesh position={[-5.6, 1.4, 6.2]} castShadow>
+        <boxGeometry args={[1.4, 1.8, 1.4]} />
+        <meshStandardMaterial color="#8b6dff" roughness={0.6} />
       </mesh>
 
       {/* Collectibles */}
@@ -653,6 +720,7 @@ export default function App() {
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
       <HUD collected={collected} total={total} win={win} hint={hint} />
+      <RetroScreenOverlay />
 
       <Canvas
         shadows
