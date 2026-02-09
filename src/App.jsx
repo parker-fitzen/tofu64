@@ -57,11 +57,29 @@ function useKeys() {
 
     const onKeyDown = (e) => {
       const code = e?.code;
+      if (
+        code === "ArrowUp" ||
+        code === "ArrowDown" ||
+        code === "ArrowLeft" ||
+        code === "ArrowRight" ||
+        code === "Space"
+      ) {
+        e.preventDefault();
+      }
       safeSetKey(keysRef.current, code, true);
     };
 
     const onKeyUp = (e) => {
       const code = e?.code;
+      if (
+        code === "ArrowUp" ||
+        code === "ArrowDown" ||
+        code === "ArrowLeft" ||
+        code === "ArrowRight" ||
+        code === "Space"
+      ) {
+        e.preventDefault();
+      }
       safeSetKey(keysRef.current, code, false);
     };
 
@@ -84,7 +102,7 @@ function lerp(a, b, t) {
   return a + (b - a) * t;
 }
 
-function HUD({ collected, total, win, hint }) {
+function HUD({ collected, total, win, hint, escaped, exitOpen }) {
   return (
     <div
       style={{
@@ -118,6 +136,20 @@ function HUD({ collected, total, win, hint }) {
           <div style={{ fontSize: 12, opacity: 0.95 }}>TOFU64: FRIDGE LEVEL</div>
           <div style={{ fontSize: 13, marginTop: 6 }}>
             Edamame: <b>{collected}</b> / {total}
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: "rgba(0,0,0,0.40)",
+            border: "1px solid rgba(255,255,255,0.18)",
+            padding: "8px 10px",
+            borderRadius: 10,
+          }}
+        >
+          <div style={{ fontSize: 12, opacity: 0.95 }}>Exit status</div>
+          <div style={{ fontSize: 12, opacity: 0.95, marginTop: 6 }}>
+            {exitOpen ? "Fridge door unlocked." : "Find all edamame."}
           </div>
         </div>
 
@@ -183,7 +215,9 @@ function HUD({ collected, total, win, hint }) {
               YOU RAIDED THE FRIDGE
             </div>
             <div style={{ fontSize: 13, opacity: 0.95, marginTop: 10 }}>
-              You collected all edamame.
+              {escaped
+                ? "You escaped with the tofu haul."
+                : "You collected all edamame."}
               <br />
               Press <b>R</b> to run it back.
             </div>
@@ -194,14 +228,59 @@ function HUD({ collected, total, win, hint }) {
   );
 }
 
+function RetroOverlay() {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        pointerEvents: "none",
+        background:
+          "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)",
+        backgroundSize: "100% 3px",
+        mixBlendMode: "soft-light",
+        opacity: 0.5,
+      }}
+    />
+  );
+}
+
 function FridgeLighting() {
   return (
     <>
-      <ambientLight intensity={0.55} />
+      <ambientLight intensity={0.48} />
       {/* Fridge bulb */}
-      <pointLight position={[0, 7.2, -7.5]} intensity={55} distance={28} />
-      <pointLight position={[5.5, 5.0, -1]} intensity={12} distance={18} />
-      <pointLight position={[-5.5, 5.0, -1]} intensity={12} distance={18} />
+      <pointLight
+        castShadow
+        position={[0, 7.2, -7.5]}
+        intensity={55}
+        distance={28}
+      />
+      <pointLight
+        castShadow
+        position={[5.5, 5.0, -1]}
+        intensity={12}
+        distance={18}
+      />
+      <pointLight
+        castShadow
+        position={[-5.5, 5.0, -1]}
+        intensity={12}
+        distance={18}
+      />
+      <directionalLight
+        castShadow
+        position={[6, 10, 8]}
+        intensity={0.6}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+        shadow-camera-near={1}
+        shadow-camera-far={30}
+        shadow-camera-left={-12}
+        shadow-camera-right={12}
+        shadow-camera-top={12}
+        shadow-camera-bottom={-12}
+      />
     </>
   );
 }
@@ -297,6 +376,50 @@ function Collectible({ id, position, onCollect, disabled }) {
   );
 }
 
+function ExitPortal({ open, onExit }) {
+  const ringRef = useRef(null);
+  const [spin] = useState(() => Math.random() * Math.PI * 2);
+
+  useFrame((state, dt) => {
+    if (!ringRef.current) return;
+    ringRef.current.rotation.y += dt * 0.8;
+    const t = state.clock.elapsedTime;
+    ringRef.current.position.y = 6.5 + Math.sin(t * 1.6 + spin) * 0.15;
+  });
+
+  return (
+    <RigidBody type="fixed" position={[0, 6.5, 8.1]} colliders={false}>
+      <CuboidCollider
+        args={[1.1, 1.6, 0.6]}
+        sensor
+        onIntersectionEnter={() => {
+          if (open) onExit();
+        }}
+      />
+      <group ref={ringRef}>
+        <mesh>
+          <torusGeometry args={[1.1, 0.18, 12, 24]} />
+          <meshStandardMaterial
+            color={open ? "#ffd35c" : "#8aa6c8"}
+            emissive={open ? "#ffb93f" : "#2f3a4a"}
+            emissiveIntensity={open ? 0.8 : 0.15}
+            roughness={0.3}
+            metalness={0.3}
+          />
+        </mesh>
+        <mesh>
+          <circleGeometry args={[0.9, 24]} />
+          <meshStandardMaterial
+            color={open ? "#ffe8a1" : "#d2e4f5"}
+            opacity={open ? 0.5 : 0.2}
+            transparent
+          />
+        </mesh>
+      </group>
+    </RigidBody>
+  );
+}
+
 function FridgeLevel({ onCollect, collectedSet }) {
   const collectibles = useMemo(
     () => [
@@ -361,6 +484,12 @@ function FridgeLevel({ onCollect, collectedSet }) {
         color="#f7fbff"
         roughness={0.35}
       />
+
+      {/* Spawn pad */}
+      <mesh position={[0, 0.2, 6.5]} receiveShadow>
+        <cylinderGeometry args={[1.6, 1.8, 0.25, 12]} />
+        <meshStandardMaterial color="#c5f6ff" roughness={0.2} />
+      </mesh>
 
       {/* Shelves (platforms) */}
       <Shelf pos={[0, 0.95, 3.6]} />
@@ -474,7 +603,7 @@ function TofuAvatar({ bodyRef }) {
   );
 }
 
-function PlayerController({ bodyRef, keysRef, onHint }) {
+function PlayerController({ bodyRef, keysRef, onHint, onReset }) {
   const { world } = useRapier();
   const { camera } = useThree();
   const jumpCooldown = useRef(0);
@@ -500,6 +629,7 @@ function PlayerController({ bodyRef, keysRef, onHint }) {
       body.setAngvel({ x: 0, y: 0, z: 0 }, true);
       body.setTranslation({ x: 0, y: 1.9, z: 6.5 }, true);
       onHint("Reset.");
+      onReset();
     }
 
     const p = body.translation();
@@ -632,9 +762,11 @@ export default function App() {
   const total = 10;
   const [collectedSet, setCollectedSet] = useState(() => new Set());
   const [hint, setHint] = useState("Collect all the edamame.");
+  const [escaped, setEscaped] = useState(false);
 
   const collected = collectedSet.size;
-  const win = collected >= total;
+  const exitOpen = collected >= total;
+  const win = escaped;
 
   function onCollect(id) {
     setCollectedSet((prev) => {
@@ -647,12 +779,20 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (win) setHint("");
-  }, [win]);
+    if (exitOpen && !escaped) setHint("Head to the glowing exit.");
+  }, [exitOpen, escaped]);
 
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
-      <HUD collected={collected} total={total} win={win} hint={hint} />
+      <HUD
+        collected={collected}
+        total={total}
+        win={win}
+        hint={hint}
+        escaped={escaped}
+        exitOpen={exitOpen}
+      />
+      <RetroOverlay />
 
       <Canvas
         shadows
@@ -665,6 +805,14 @@ export default function App() {
 
         <Physics gravity={[0, -22, 0]}>
           <FridgeLevel onCollect={onCollect} collectedSet={collectedSet} />
+          <ExitPortal
+            open={exitOpen}
+            onExit={() => {
+              if (!exitOpen) return;
+              setEscaped(true);
+              setHint("You made it out!");
+            }}
+          />
           <TofuAvatar bodyRef={bodyRef} />
           <PlayerController
             bodyRef={bodyRef}
@@ -672,6 +820,11 @@ export default function App() {
             onHint={(msg) => {
               if (win) return;
               if (typeof msg === "string") setHint(msg);
+            }}
+            onReset={() => {
+              setCollectedSet(new Set());
+              setEscaped(false);
+              setHint("Collect all the edamame.");
             }}
           />
         </Physics>
